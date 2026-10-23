@@ -1,0 +1,4 @@
+health,steps,decision_steps,dry_reading_steps
+healthy,667,16,189
+degraded,17,9,11
+failed,100,46,60

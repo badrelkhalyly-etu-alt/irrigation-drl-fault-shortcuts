@@ -1,0 +1,29 @@
+target,features,model,MAE,n
+d1,"M0: m, f, a",linear,3.431204212757958,728
+d1,"M0: m, f, a",boosting,3.3401586522988302,728
+d1,M1: + previous decision,linear,3.4293169573936186,728
+d1,M1: + previous decision,boosting,3.3675666945179197,728
+d1,M2: + previous m and f,linear,3.422597386967924,728
+d1,M2: + previous m and f,boosting,3.3437843629166806,728
+d1,M3: + hour of day,linear,3.4706206292550794,728
+d1,M3: + hour of day,boosting,3.665059358802184,728
+f1,"M0: m, f, a",linear,0.03480265561462606,728
+f1,"M0: m, f, a",boosting,0.0368503325621398,728
+f1,M1: + previous decision,linear,0.03483805697738429,728
+f1,M1: + previous decision,boosting,0.03572622039553539,728
+f1,M2: + previous m and f,linear,0.03409461315786808,728
+f1,M2: + previous m and f,boosting,0.0362997483821496,728
+f1,M3: + hour of day,linear,0.03513547835489436,728
+f1,M3: + hour of day,boosting,0.04030704209242404,728
+d1,"A0: m, f, a",linear,3.113476318739744,639
+d1,"A0: m, f, a",boosting,3.131740762456553,639
+d1,A1: + humidity,linear,3.154012037594723,639
+d1,A1: + humidity,boosting,3.295960379761295,639
+d1,"A2: + humidity, air temperature",linear,3.1590495427709735,639
+d1,"A2: + humidity, air temperature",boosting,3.503084775059906,639
+f1,"A0: m, f, a",linear,0.03118627396215753,639
+f1,"A0: m, f, a",boosting,0.03489466056321022,639
+f1,A1: + humidity,linear,0.032790036603592795,639
+f1,A1: + humidity,boosting,0.031759649957957575,639
+f1,"A2: + humidity, air temperature",linear,0.03324168968224728,639
+f1,"A2: + humidity, air temperature",boosting,0.032544069544435575,639

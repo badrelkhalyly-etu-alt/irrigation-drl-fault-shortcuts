@@ -1,0 +1,17 @@
+,value
+onset1_dry,0.018292682926829267
+onset1_nodry,0.019002375296912115
+onset3_dry,0.054878048780487805
+onset3_nodry,0.05463182897862233
+n_dry,164.0
+n_nodry,421.0
+diff3,0.0002462198018654757
+diff3_lo,-0.10345542996136786
+diff3_hi,0.08011804833850523
+p_diff3_positive,0.46
+share_dry_reading_healthy,0.28335832083958024
+mean_dry_share_healthy,0.05071465694957695
+share_dry_reading_degraded,0.6470588235294118
+mean_dry_share_degraded,0.16927301539434916
+share_dry_reading_failed,0.6
+mean_dry_share_failed,0.040779998060368
