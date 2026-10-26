@@ -31,9 +31,9 @@ In the public IoT greenhouse log used here, the DHT22 air sensor often writes a 
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1uy5kX4N-8XSk_6vVdfhokh6TRjWVJBCG)
 
-Colab notebook: <https://colab.research.google.com/drive/1uy5kX4N-8XSk_6vVdfhokh6TRjWVJBCG> (the same notebook can also be opened from this repository: [open from GitHub](https://colab.research.google.com/github/badrelkhalylyphd-boop/irrigation-drl-fault-shortcuts/blob/main/reproduce_colab.ipynb)).
+Colab notebook: <https://colab.research.google.com/drive/1uy5kX4N-8XSk_6vVdfhokh6TRjWVJBCG> (the same notebook can also be opened from this repository: [open from GitHub](https://colab.research.google.com/github/badrelkhalylyphd-boop/irrigation-drl-fault-shortcuts/blob/main/reproduce_colab_drl_irrigation.ipynb)).
 
-`reproduce_colab.ipynb` runs everything and ends with a table that compares every number of the paper with the current run (✅ / ❌).
+`reproduce_colab_drl_irrigation.ipynb` runs everything and ends with a table that compares every number of the paper with the current run (✅ / ❌).
 - On Colab, upload `greenhouse_dataset.csv` in the Files panel first; the notebook reads it from `/content`. The first cell installs the pinned versions and restarts the session once; then choose *Run all* again.
 - Locally, the copy in `data/` is used.
 - Run time: about 80 min for the whole notebook on a laptop (main experiment with 135 trainings plus the robustness check with 40); expect roughly twice as long on a free Colab CPU. The robustness check can be skipped (`RUN_ROBUSTNESS = False`); its checks then show ❌.
