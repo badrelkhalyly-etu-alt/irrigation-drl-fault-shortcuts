@@ -1,5 +1,7 @@
 """Shared code of the DQN experiments: sensor regimes, agents, training, evaluation, shortcut index,
 and seed-level statistics (mean, interquartile mean, bootstrap intervals)."""
+import os
+from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
@@ -154,20 +156,46 @@ def baselines(t):
     }
 
 
+_WORKER = {}
+
+
+def _init_worker(regimes):
+    _WORKER["regimes"] = regimes
+
+
+def _train_and_score(job):
+    """One (config, seed): train, score in every regime, shortcut index. Each job has its own random
+    generators, so the result does not depend on which process runs it."""
+    name, cfg, seed, with_curve = job
+    regimes = _WORKER["regimes"]
+    curve = [] if with_curve else None
+    ag = train(cfg, seed, regimes, curve, name)
+    rows = [{"config": name, "seed": seed, "regime": reg, **evaluate(ag, env)} for reg, env in regimes.items()]
+    return rows, {"config": name, "seed": seed, **csi(ag, regimes["source"])}, curve or []
+
+
 def run_experiment(t, regimes, configs, prefix, curve_configs=(), seeds=SEEDS):
     """Train every config with every seed, score in every regime, compute the shortcut index in the
-    source regime, and write <prefix>_eval.csv, <prefix>_csi.csv, <prefix>_curve.csv, <prefix>_stats.csv."""
+    source regime, and write <prefix>_eval.csv, <prefix>_csi.csv, <prefix>_curve.csv, <prefix>_stats.csv.
+    The trainings run in N_JOBS processes (default: all cores); results are identical for any N_JOBS."""
     rows, csis, curve = [], [], []
     for name, pol in baselines(t).items():
         for reg, env in regimes.items():
             rows.append({"config": name, "seed": -1, "regime": reg, **evaluate(pol, env)})
-    for name, cfg in configs.items():
-        for seed in seeds:
-            ag = train(cfg, seed, regimes, curve if name in curve_configs else None, name)
-            for reg, env in regimes.items():
-                rows.append({"config": name, "seed": seed, "regime": reg, **evaluate(ag, env)})
-            csis.append({"config": name, "seed": seed, **csi(ag, regimes["source"])})
-        print(prefix, name, "done", flush=True)
+    jobs = [(name, cfg, seed, name in curve_configs) for name, cfg in configs.items() for seed in seeds]
+    n_jobs = int(os.environ.get("N_JOBS", os.cpu_count() or 1))
+    if n_jobs > 1:
+        pool = ProcessPoolExecutor(max_workers=n_jobs, initializer=_init_worker, initargs=(regimes,))
+        results = pool.map(_train_and_score, jobs)
+    else:
+        _init_worker(regimes); pool = None
+        results = map(_train_and_score, jobs)
+    for k, (r, c, cv) in enumerate(results):
+        rows += r; csis.append(c); curve += cv
+        if k == len(jobs) - 1 or jobs[k + 1][0] != jobs[k][0]:
+            print(prefix, jobs[k][0], "done", flush=True)
+    if pool is not None:
+        pool.shutdown()
     ev = pd.DataFrame(rows); ev.to_csv(f"{prefix}_eval.csv", index=False)
     cs = pd.DataFrame(csis); cs.to_csv(f"{prefix}_csi.csv", index=False)
     pd.DataFrame(curve).to_csv(f"{prefix}_curve.csv", index=False)

@@ -33,21 +33,27 @@ CONFIGS = {
     "sc-b10": dict(mode="full", beta=10.0, rho=0.0, train="source"),
 }
 
-t = pd.read_parquet("transitions.parquet")
-ev, cs, per_seed = run_experiment(t, make_regimes(t), CONFIGS, "shortcut", curve_configs=("full", "sc"))
 
-# One-sided Mann-Whitney tests between independent sets of seeds.
-tests = []
-for a, b, metric, alt in [("sc", "full", "spread", "less"), ("sc", "full", "mean_abs_dq", "less"),
-                          ("sc", "full", "worst", "greater"), ("sc", "full", "coupled", "greater"),
-                          ("sc", "full+RAE", "mean_abs_dq", "less"), ("full+RAE", "full", "flip_rate", "greater"),
-                          ("ffill", "sc", "worst", "two-sided"), ("sc-b0.1", "sc", "source", "two-sided")]:
-    x = per_seed.loc[per_seed.config == a, metric]; y = per_seed.loc[per_seed.config == b, metric]
-    u, p = mannwhitneyu(x, y, alternative=alt)
-    tests.append({"a": a, "b": b, "metric": metric, "alternative": alt, "U": u, "p": p,
-                  "median_a": x.median(), "median_b": y.median()})
-tests = pd.DataFrame(tests); tests.to_csv("shortcut_tests.csv", index=False)
-pd.set_option("display.width", 220)
-st = pd.read_csv("shortcut_stats.csv")
-print(st.pivot_table(index="config", columns="metric", values="mean").round(4).to_string())
-print(tests.round(4).to_string(index=False))
+def main():
+    t = pd.read_parquet("transitions.parquet")
+    ev, cs, per_seed = run_experiment(t, make_regimes(t), CONFIGS, "shortcut", curve_configs=("full", "sc"))
+
+    # One-sided Mann-Whitney tests between independent sets of seeds.
+    tests = []
+    for a, b, metric, alt in [("sc", "full", "spread", "less"), ("sc", "full", "mean_abs_dq", "less"),
+                              ("sc", "full", "worst", "greater"), ("sc", "full", "coupled", "greater"),
+                              ("sc", "full+RAE", "mean_abs_dq", "less"), ("full+RAE", "full", "flip_rate", "greater"),
+                              ("ffill", "sc", "worst", "two-sided"), ("sc-b0.1", "sc", "source", "two-sided")]:
+        x = per_seed.loc[per_seed.config == a, metric]; y = per_seed.loc[per_seed.config == b, metric]
+        u, p = mannwhitneyu(x, y, alternative=alt)
+        tests.append({"a": a, "b": b, "metric": metric, "alternative": alt, "U": u, "p": p,
+                      "median_a": x.median(), "median_b": y.median()})
+    tests = pd.DataFrame(tests); tests.to_csv("shortcut_tests.csv", index=False)
+    pd.set_option("display.width", 220)
+    st = pd.read_csv("shortcut_stats.csv")
+    print(st.pivot_table(index="config", columns="metric", values="mean").round(4).to_string())
+    print(tests.round(4).to_string(index=False))
+
+
+if __name__ == "__main__":
+    main()

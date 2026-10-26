@@ -3,10 +3,12 @@
 The state of a 10-min step is (m, f): the median soil-moisture reading of the step and the share of
 its readings at or below 49 % (dry readings). diagnostics.py shows that the previous decision, the
 previous step and the hour add nothing to the prediction of the next step given (m, f, a).
-Everything is numpy/scikit-learn so that runs are identical on a laptop and on Colab.
+Everything that feeds the simulators and the networks uses element-wise numpy operations only, so that
+runs are bit-identical on every machine: the k-NN search breaks distance ties by row order (tree-based
+searches break them differently on Windows and Linux), and the matrix products of the MLP avoid BLAS,
+whose summation order depends on the processor.
 """
 import numpy as np
-from sklearn.neighbors import NearestNeighbors
 
 STEP_MIN = 10
 DRY = 49            # a reading <= 49 % is "dry"; the controller never logs a decision above it
@@ -94,6 +96,29 @@ def features(m, f):
     return np.column_stack([(np.asarray(m, float) - 75.0) / 15.0, np.asarray(f, float) * 4.0])
 
 
+class ExactKNN:
+    """Exact Euclidean k nearest neighbours. Many logged states share the same (m, f), so ties are
+    frequent; they are broken by row order, which makes the search identical on every platform."""
+
+    def __init__(self, n_neighbors):
+        self.k = n_neighbors
+
+    def fit(self, X):
+        self.X = np.asarray(X, float)
+        return self
+
+    def kneighbors(self, Q, return_distance=True):
+        Q = np.asarray(Q, float)
+        d2 = np.zeros((len(Q), len(self.X)))
+        for j in range(self.X.shape[1]):
+            diff = Q[:, j:j + 1] - self.X[None, :, j]
+            d2 = d2 + diff * diff
+        idx = np.argsort(d2, axis=1, kind="stable")[:, :self.k]
+        if not return_distance:
+            return idx
+        return np.sqrt(np.take_along_axis(d2, idx, 1)), idx
+
+
 class KNNSim:
     """Next-step model that replays logged transitions: given (state, action) it draws one of the
     k nearest logged transitions with that action and applies its moisture change and next dry share."""
@@ -103,7 +128,7 @@ class KNNSim:
         self.nn, self.dm, self.f1 = {}, {}, {}
         for act in (0, 1):
             t = trans[trans["a"] == act]
-            self.nn[act] = NearestNeighbors(n_neighbors=min(k, len(t))).fit(features(t["m"], t["f"]))
+            self.nn[act] = ExactKNN(n_neighbors=min(k, len(t))).fit(features(t["m"], t["f"]))
             self.dm[act] = (t["m1"] - t["m"]).to_numpy()
             self.f1[act] = t["f1"].to_numpy()
 
@@ -136,18 +161,27 @@ class KNNSim:
 
 
 # --------------------------------------------------------------------------- numpy MLP with Adam
+def matmul(a, b):
+    """a @ b as a sequence of element-wise products and sums (fixed order, no BLAS)."""
+    out = a[:, 0:1] * b[0:1, :]
+    for j in range(1, a.shape[1]):
+        out = out + a[:, j:j + 1] * b[j:j + 1, :]
+    return out
+
+
 class MLP:
     def __init__(self, sizes, rng, lr=5e-4):
         self.W = [rng.normal(0, np.sqrt(2 / i), (i, o)) for i, o in zip(sizes[:-1], sizes[1:])]
         self.b = [np.zeros(o) for o in sizes[1:]]
         self.lr, self.t = lr, 0
+        self.b1t, self.b2t = 1.0, 1.0          # 0.9**t and 0.999**t, by repeated products
         self.m = [np.zeros_like(p) for p in self.W + self.b]
         self.v = [np.zeros_like(p) for p in self.W + self.b]
 
     def forward(self, x):
         acts = [x]
         for i, (W, b) in enumerate(zip(self.W, self.b)):
-            x = x @ W + b
+            x = matmul(x, W) + b
             if i < len(self.W) - 1:
                 x = np.maximum(x, 0)
             acts.append(x)
@@ -160,17 +194,18 @@ class MLP:
         """Gradients of the parameters for an output gradient g."""
         gW, gb = [], []
         for i in range(len(self.W) - 1, -1, -1):
-            gW.insert(0, acts[i].T @ g); gb.insert(0, g.sum(0))
+            gW.insert(0, matmul(acts[i].T, g)); gb.insert(0, g.sum(0))
             if i:
-                g = (g @ self.W[i].T) * (acts[i] > 0)
+                g = matmul(g, self.W[i].T) * (acts[i] > 0)
         return gW + gb
 
     def adam(self, grads):
         self.t += 1
+        self.b1t *= 0.9; self.b2t *= 0.999
         for j, (p, gr) in enumerate(zip(self.W + self.b, grads)):
             self.m[j] = 0.9 * self.m[j] + 0.1 * gr
-            self.v[j] = 0.999 * self.v[j] + 0.001 * gr ** 2
-            p -= self.lr * (self.m[j] / (1 - 0.9 ** self.t)) / (np.sqrt(self.v[j] / (1 - 0.999 ** self.t)) + 1e-8)
+            self.v[j] = 0.999 * self.v[j] + 0.001 * gr * gr
+            p -= self.lr * (self.m[j] / (1 - self.b1t)) / (np.sqrt(self.v[j] / (1 - self.b2t)) + 1e-8)
 
     def update(self, x, a, target, pair=None, beta=0.0):
         """One Adam step on the Huber loss of Q(x, a) against target. With pair = (x_clean, x_fault)
@@ -228,7 +263,7 @@ class FaultPOMDP:
                 if act == 1 and (null_effect or sel.sum() < MIN_SUPPORT):
                     sel = (trans["a"] == 0) & ((bands == b) if b >= 0 else True)
                 t = trans[sel]
-                self.models[(b, act)] = (NearestNeighbors(n_neighbors=min(k, len(t))).fit(features(t["m"], t["f"])),
+                self.models[(b, act)] = (ExactKNN(n_neighbors=min(k, len(t))).fit(features(t["m"], t["f"])),
                                          (t["m1"] - t["m"]).to_numpy(), t["f1"].to_numpy(), t["hum1"].to_numpy(), t["tair1"].to_numpy())
 
     def reset(self, n, rng):

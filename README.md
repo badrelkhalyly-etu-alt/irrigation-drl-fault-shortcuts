@@ -36,7 +36,7 @@ Colab notebook: <https://colab.research.google.com/drive/1uy5kX4N-8XSk_6vVdfhokh
 `reproduce_colab_drl_irrigation.ipynb` runs everything and ends with a table that compares every number of the paper with the current run (✅ / ❌).
 - On Colab, upload `greenhouse_dataset.csv` in the Files panel first; the notebook reads it from `/content`. The first cell installs the pinned versions and restarts the session once; then choose *Run all* again.
 - Locally, the copy in `data/` is used.
-- Run time: about 80 min for the whole notebook on a laptop (main experiment with 135 trainings plus the robustness check with 40); expect roughly twice as long on a free Colab CPU. The robustness check can be skipped (`RUN_ROBUSTNESS = False`); its checks then show ❌.
+- Run time: the main experiment trains 135 networks and the robustness check 40. Trainings run in parallel on all CPU cores. This takes about 15 min on a 14-core laptop; on a free Colab CPU (2 cores), expect 2 to 3 hours. The robustness check can be skipped (`RUN_ROBUSTNESS = False`); its checks then show ❌.
 
 ## Quick start (command line)
 
@@ -53,23 +53,26 @@ Outputs go to `outputs/`; our own run is in `results/`.
 
 **Fault chain.** After a decision taken with a healthy sensor, a failure begins within 30 min in 21.4 % of cases (3/14), against 5.5 % without a decision (32/585). The 95 % day-bootstrap interval of the difference is [−5.2, 82.0] points. Without a decision, healthy steps with a dry soil reading are not followed by more failures than those without one (5.49 % vs 5.46 %), so a glitch acting through the soil reading is not supported. A glitch that triggers the decision itself cannot be excluded. Air readings add nothing to the prediction of soil moisture once soil state and decision are known.
 
-**Simulator audit.** Averaged over logged dry steps, a decision lowers the expected next dry share by 0.032 in the main replay simulator, 0.021 in the tabular model and 0.0097 within state in the log. In the driest band, the simulator borrows decision outcomes from wetter soil. The band-constrained simulator removes this.
+**Simulator audit.** Averaged over logged dry steps, a decision lowers the expected next dry share by 0.033 in the main replay simulator, 0.021 in the tabular model and 0.0097 within state in the log. In the driest band, the simulator borrows decision outcomes from wetter soil. The band-constrained simulator removes this.
 
 **15 seeds, reward per step (×10⁻³): mean over seeds; worst regime (IQM); spread; CSI ΔQ**
 
 | Agent | Coupled | Worst (IQM) | Spread | CSI ΔQ |
 |---|---|---|---|---|
-| DQN | −29.3 | −27.6 | 4.8 | 0.117 |
-| SC-DQN (β = 1) | −26.0 | −26.0 | 1.8 | 0.015 |
-| DQN + last valid | −25.6 | −25.7 | 1.7 | – |
-| DQN + masking | −26.4 | −23.7 | 0.0 | – |
-| Tabular plan (soil only) | −25.0 | −25.0 | 0.0 | – |
+| DQN | −28.9 | −28.9 | 3.6 | 0.151 |
+| SC-DQN (β = 1) | −25.1 | −26.0 | 1.6 | 0.016 |
+| DQN + last valid | −26.4 | −25.5 | 1.6 | – |
+| DQN + masking | −27.1 | −25.0 | 0.0 | – |
+| Tabular plan (soil only) | −26.1 | −26.1 | 0.0 | – |
 
-SC-DQN against DQN, one-sided Mann–Whitney tests: CSI p < 0.001; spread p = 0.041; coupled regime p = 0.021; worst regime p = 0.068. Last-valid imputation and masking are as robust as SC-DQN. Reliability-aware exploration and training with the action-dependent chain add nothing measurable.
+SC-DQN against DQN, one-sided Mann–Whitney tests: CSI p < 0.001; spread p = 0.0004; coupled regime p = 0.0003; worst regime p = 0.003. Last-valid imputation and masking are as robust as SC-DQN (last valid against SC-DQN, worst regime: p = 0.56, two-sided). Reliability-aware exploration and training with the action-dependent chain add nothing measurable.
+
+**Band-constrained simulator, 10 seeds.** The plain DQN still depends on the fault regime (spread 5.1, CSI 0.164). SC-DQN reduces both (spread 2.8, p = 0.032; CSI 0.019, p = 0.0001). Last-valid imputation is the best learned agent there (worst regime −33.6), level with the tabular plan (−33.4).
 
 ## Reproducibility notes
 
-- Verified on Windows 11, Python 3.11.9, with the versions in `requirements.txt`. Networks, simulators and bootstraps use numpy/scikit-learn with fixed seeds.
+- Verified on Windows 11, Python 3.11.9, with the versions in `requirements.txt`.
+- Runs are bit-identical on every machine. The simulators and the networks use element-wise numpy operations only. The network does not call BLAS, whose summation order depends on the processor. Nearest-neighbour ties, which are frequent because many logged states share the same (m, f), are broken by row order. A tree-based search would break them differently on Windows and Linux. We checked that the results do not change when numpy's vector instruction sets or the OpenBLAS kernel are switched, and that they do not depend on the number of parallel processes (`N_JOBS`, default: all cores).
 - `Label` is the controller's logged decision; the log has no water volumes or crop measurements. The reward (share of readings at or below 49 % in the next step, minus a cost per decision) is a modelling choice; the paper also reports the shortfall of the median below 60 %.
 
 ## Data
